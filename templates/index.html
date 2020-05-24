@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Отчеты</title>
+</head>
+
+<body>
+  {% for statistic in statistics %}
+      <div>Математическое ожидание {{ statistic.mean }}</div>
+      <div>Дисперсия {{ statistic.dispersion }}</div>
+      <div>Среднеквадратичное отклонение {{ statistic.standard_deviation }}</div>
+      {% for file in statistic.files %}
+          <img src="static/{{ file.path }}">
+      {% endfor %}
+  {% endfor %}
+</body>
+
+</html>
