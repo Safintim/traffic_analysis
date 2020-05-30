@@ -14,12 +14,12 @@ from sql import insert_statistic, insert_file
 DISPLAY_FILTERS = 'http or tcp or udp or tls or dns and !mdns'
 STATIC_DIR = 'static'
 SQLITE_PATH = 'sqlitedb.db'
-TIMEOUT = 10
+PACKET_COUNT = 25000
 
 
-def capture_traffic(timeout=None, interface='en0'):
+def capture_traffic(packet_count, interface='en0'):
     capture = pyshark.LiveCapture(interface, display_filter=DISPLAY_FILTERS)
-    capture.sniff(timeout=timeout)
+    capture.sniff(packet_count=packet_count)
     return capture
 
 
@@ -69,8 +69,14 @@ def get_mean_size_packet(df_size, df_count):
     return df_size / df_count
 
 
-def save_plot(df):
-    plot = df.plot(kind='bar', color=plt.cm.Paired(np.arange(len(df))))
+def save_plot(df, title, xlabel, ylabel):
+    plot = df.plot(
+        kind='bar',
+        color=plt.cm.Paired(np.arange(len(df))),
+        title=title
+    )
+    plot.set_xlabel(xlabel)
+    plot.set_ylabel(ylabel)
     fig = plot.get_figure()
     filename = '{}.png'.format(datetime.strftime(datetime.now(), '%Y-%m-%d_%H:%M:%S:%f'))
     filepath = os.path.join(STATIC_DIR, filename)
@@ -81,10 +87,9 @@ def save_plot(df):
 if __name__ == '__main__':
     conn = sqlite3.connect(SQLITE_PATH)
     while True:
-        capture = capture_traffic(TIMEOUT)
-        packets = capture._packets
-        mean = statistic.calculate_mean(packets)
-        dispersion = statistic.calculate_dispersion(packets, mean)
+        capture = capture_traffic(packet_count=PACKET_COUNT)
+        mean = statistic.calculate_online_mean(capture)
+        dispersion = statistic.calculate_online_dispersion(capture, mean)
         standard_deviation = math.sqrt(dispersion)
 
         cursor = insert_statistic(
@@ -97,16 +102,32 @@ if __name__ == '__main__':
         )
         statistic_id = cursor.lastrowid
 
-        data = format_packets(packets)
+        data = format_packets(iter(capture))
         df = pd.DataFrame(data=data)
         protocol_size = get_protocol_size(df)
         protocol_count = get_protocol_count(df)
         mean_size_packet = get_mean_size_packet(protocol_size, protocol_count)
         filepaths = (
-            save_plot(protocol_size),
-            save_plot(protocol_count),
-            save_plot(mean_size_packet),
+            save_plot(
+                protocol_size,
+                title='Общий размер пакетов сгруппирированных по протоколам',
+                xlabel='Protocol',
+                ylabel='Size (Mb)'
+            ),
+            save_plot(
+                protocol_count,
+                title='Количество пакетов сгруппирированных по протоколам',
+                xlabel='Protocol',
+                ylabel='Count'
+            ),
+            save_plot(
+                mean_size_packet,
+                title='Средние размеры пакета для каждого протокола',
+                xlabel='Protocol',
+                ylabel='Size (bytes)'
+            ),
         )
 
         for filepath in filepaths:
             insert_file(conn, (statistic_id, filepath))
+        print('25 end')

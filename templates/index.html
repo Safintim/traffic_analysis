@@ -2,17 +2,42 @@
 <html>
 <head>
 <title>Отчеты</title>
+<style>
+  h1 {
+    text-align: center;
+  }
+  .container {
+    margin: 50px auto;
+  }
+  .row {
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: space-around;
+    align-items: center;
+  }
+  .stats>div {
+    text-align: center;
+    margin: 5px auto;
+  }
+</style>
 </head>
 
 <body>
-  {% for statistic in statistics %}
-      <div>Математическое ожидание {{ statistic.mean }}</div>
-      <div>Дисперсия {{ statistic.dispersion }}</div>
-      <div>Среднеквадратичное отклонение {{ statistic.standard_deviation }}</div>
-      {% for file in statistic.files %}
-          <img src="static/{{ file.path }}">
-      {% endfor %}
-  {% endfor %}
+  <h1>Анализ сетевого трафика</h1>
+    {% for statistic in statistics %}
+    <div class="container">
+      <div class="stats">
+        <div>Мат. ожидание {{ statistic.mean }}</div>  
+        <div>Дисперсия {{ statistic.dispersion }}</div>  
+        <div>Среднеквадратичное отклонение {{ statistic.standard_deviation }}</div>
+      </div>
+      <div class="row">
+        {% for file in statistic.files %}
+           <img src="static/{{ file.path }}" width="25%">
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
 </body>
 
 </html>

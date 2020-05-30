@@ -2,6 +2,7 @@ import os
 import datetime
 
 from flask import Flask, render_template
+from sqlalchemy import desc
 from flask_sqlalchemy import SQLAlchemy
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -29,5 +30,5 @@ class File(db.Model):
 
 @app.route('/')
 def hello_world():
-    statistics = Statistic.query.all()
+    statistics = Statistic.query.order_by(desc(Statistic.id)).all()
     return render_template('index.html', statistics=statistics)
