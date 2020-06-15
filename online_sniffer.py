@@ -1,10 +1,7 @@
-import os
 import math
 import sqlite3
-from datetime import datetime
 
-import numpy as np
-import matplotlib.pyplot as plt
+import RPi.GPIO as gpio
 import pandas as pd
 import pyshark
 
@@ -43,60 +40,75 @@ def format_packets(packets):
     return data
 
 
-def get_protocol_count(df):
-    """
-    Количество запросов для каждого протокола
-    """
-    df_protocol = df.groupby('Protocol').Source.count()
-    df_protocol.sort_values(ascending=False)
-    return df_protocol
+def setup_gpio():
+    gpio.setup(10, gpio.OUT)
+    gpio.setup(12, gpio.OUT)
+    gpio.setup(13, gpio.OUT)
+    gpio.setup(14, gpio.OUT)
+    gpio.setup(15, gpio.OUT)
+    gpio.setup(16, gpio.OUT)
+    gpio.setup(17, gpio.OUT)
+    gpio.setup(18, gpio.OUT)
+    gpio.setup(19, gpio.OUT)
+    gpio.setup(21, gpio.OUT)
+    gpio.setup(24, gpio.OUT)
+    gpio.setup(26, gpio.OUT)
 
 
-def get_protocol_size(df):
-    """
-    Общий размер данных для каждого протокола
-    """
-    df_sum_length = df.groupby('Protocol').Length.sum()
-    df_sum_length_mb = statistic.get_mb_from_b(df_sum_length)
-    df_sum_length_mb.sort_values(ascending=False)
-    return df_sum_length_mb
+def on_sun():
+    gpio.setup(13, gpio.HIGH)
+    gpio.setup(19, gpio.HIGH)
+    gpio.setup(16, gpio.HIGH)
 
 
-def get_mean_size_packet(df_size, df_count):
-    """
-    Средний размер пакета для протокола
-    """
-    return df_size / df_count
+def off_sun():
+    gpio.setup(13, gpio.LOW)
+    gpio.setup(19, gpio.LOW)
+    gpio.setup(16, gpio.LOW)
 
 
-def save_plot(df, title, xlabel, ylabel):
-    plot = df.plot(
-        kind='bar',
-        color=plt.cm.Paired(np.arange(len(df))),
-        title=title
-    )
-    plot.set_xlabel(xlabel)
-    plot.set_ylabel(ylabel)
-    fig = plot.get_figure()
-    filename = '{}.png'.format(datetime.strftime(datetime.now(), '%Y-%m-%d_%H:%M:%S:%f'))
-    filepath = os.path.join(STATIC_DIR, filename)
-    fig.savefig(filepath)
-    return filename
+def off_cloud():
+    gpio.setup(10, gpio.LOW)
+    gpio.setup(12, gpio.LOW)
+    gpio.setup(14, gpio.LOW)
+    gpio.setup(15, gpio.LOW)
+    gpio.setup(17, gpio.LOW)
+    gpio.setup(18, gpio.LOW)
+    gpio.setup(21, gpio.LOW)
+    gpio.setup(24, gpio.LOW)
+    gpio.setup(26, gpio.LOW)
+
+
+def on_cloud():
+    gpio.setup(10, gpio.HIGH)
+    gpio.setup(12, gpio.HIGH)
+    gpio.setup(14, gpio.HIGH)
+    gpio.setup(15, gpio.HIGH)
+    gpio.setup(17, gpio.HIGH)
+    gpio.setup(18, gpio.HIGH)
+    gpio.setup(21, gpio.HIGH)
+    gpio.setup(24, gpio.HIGH)
+    gpio.setup(26, gpio.HIGH)
 
 
 if __name__ == '__main__':
+    gpio.setmode(gpio.BCM)
+    setup_gpio()
     conn = sqlite3.connect(SQLITE_PATH)
     while True:
         capture = capture_traffic(packet_count=PACKET_COUNT)
+        on_sun()
+        on_cloud()
         mean = statistic.calculate_online_mean(capture)
         dispersion = statistic.calculate_online_dispersion(capture, mean)
         standard_deviation = math.sqrt(dispersion)
+        off_sun()
 
         cursor = insert_statistic(
             conn,
             (
                 statistic.get_mb_from_b(mean),
-                statistic.get_mb_from_b(dispersion),
+                statistic.get_mb_from_b_for_dispersion(dispersion),
                 statistic.get_mb_from_b(standard_deviation),
             )
         )
@@ -104,30 +116,34 @@ if __name__ == '__main__':
 
         data = format_packets(iter(capture))
         df = pd.DataFrame(data=data)
-        protocol_size = get_protocol_size(df)
-        protocol_count = get_protocol_count(df)
-        mean_size_packet = get_mean_size_packet(protocol_size, protocol_count)
+        protocol_size = statistic.get_protocol_size(df)
+        protocol_count = statistic.get_protocol_count(df)
+        mean_size_packet = statistic.get_mean_size_packet(protocol_size, protocol_count)
         filepaths = (
-            save_plot(
+            statistic.save_plot(
                 protocol_size,
-                title='Общий размер пакетов сгруппирированных по протоколам',
+                title='Общий размер пакетов сгруппированных по протоколам',
                 xlabel='Protocol',
-                ylabel='Size (Mb)'
+                ylabel='Size (Mb)',
+                static_dir=STATIC_DIR,
             ),
-            save_plot(
+            statistic.save_plot(
                 protocol_count,
-                title='Количество пакетов сгруппирированных по протоколам',
+                title='Количество пакетов сгруппированных по протоколам',
                 xlabel='Protocol',
-                ylabel='Count'
+                ylabel='Count',
+                static_dir=STATIC_DIR,
             ),
-            save_plot(
+            statistic.save_plot(
                 mean_size_packet,
                 title='Средние размеры пакета для каждого протокола',
                 xlabel='Protocol',
-                ylabel='Size (bytes)'
+                ylabel='Size (bytes)',
+                static_dir=STATIC_DIR,
             ),
         )
 
         for filepath in filepaths:
             insert_file(conn, (statistic_id, filepath))
-        print('25 end')
+        off_cloud()
+    gpio.cleanup()
